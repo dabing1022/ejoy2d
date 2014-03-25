@@ -15,17 +15,22 @@
 #include "label.h"
 #include "particle.h"
 
-#define LOGIC_FRAME 30
+//#define LOGIC_FRAME 30
 
 #define EJOY_INIT "EJOY2D_INIT"
 #define EJOY_UPDATE "EJOY2D_UPDATE"
 #define EJOY_DRAWFRAME "EJOY2D_DRAWFRAME"
 #define EJOY_TOUCH "EJOY2D_TOUCH"
+#define EJOY_GESTURE "EJOY2D_GESTURE"
+#define EJOY_MESSAGE "EJOY2D_MESSAGE"
+#define EJOY_HANDLE_ERROR "EJOY2D_HANDLE_ERROR"
 
 #define TRACEBACK_FUNCTION 1
 #define UPDATE_FUNCTION 2
 #define DRAWFRAME_FUNCTION 3
 #define TOP_FUNCTION 3
+
+static int LOGIC_FRAME = 30;
 
 struct game {
 	lua_State *L;
@@ -47,6 +52,9 @@ linject(lua_State *L) {
 		EJOY_UPDATE,
 		EJOY_DRAWFRAME,
 		EJOY_TOUCH,
+		EJOY_GESTURE,
+		EJOY_MESSAGE,
+		EJOY_HANDLE_ERROR,
 	};
 	int i;
 	for (i=0;i<sizeof(ejoy_callback)/sizeof(ejoy_callback[0]);i++) {
@@ -142,6 +150,12 @@ traceback (lua_State *L) {
 }
 
 void
+ejoy2d_game_logicframe(int frame)
+{
+	LOGIC_FRAME = frame;
+}
+
+void
 ejoy2d_game_start(struct game *G) {
 	lua_State *L = G->L;
 	lua_getfield(L, LUA_REGISTRYINDEX, EJOY_INIT);
@@ -150,6 +164,36 @@ ejoy2d_game_start(struct game *G) {
 	lua_pushcfunction(L, traceback);
 	lua_getfield(L,LUA_REGISTRYINDEX, EJOY_UPDATE);
 	lua_getfield(L,LUA_REGISTRYINDEX, EJOY_DRAWFRAME);
+	lua_getfield(L,LUA_REGISTRYINDEX, EJOY_MESSAGE);
+}
+
+
+void 
+ejoy2d_handle_error(lua_State *L, const char *err_type, const char *msg) {
+	lua_getfield(L, LUA_REGISTRYINDEX, EJOY_HANDLE_ERROR);
+	lua_pushstring(L, err_type);
+	lua_pushstring(L, msg);
+	int err = lua_pcall(L, 2, 0, 0);
+	switch(err) {
+	case LUA_OK:
+		printf("LUA_OK\n");
+		break;
+	case LUA_ERRRUN:
+		printf("LUA_ERRRUN : %s\n", lua_tostring(L,-1));
+		break;
+	case LUA_ERRMEM:
+		printf("LUA_ERRMEM : %s\n", lua_tostring(L,-1));
+		break;
+	case LUA_ERRERR:
+		printf("LUA_ERRERR : %s\n", lua_tostring(L,-1));
+		break;
+	case LUA_ERRGCMM:
+		printf("LUA_ERRGCMM : %s\n", lua_tostring(L,-1));
+		break;
+	default:
+		printf("Unknown Lua error: %d\n", err);
+		break;
+	}
 }
 
 static int
@@ -159,18 +203,23 @@ call(lua_State *L, int n, int r) {
 	case LUA_OK:
 		break;
 	case LUA_ERRRUN:
+		ejoy2d_handle_error(L, "LUA_ERRRUN", lua_tostring(L,-1));
 		fault("LUA_ERRRUN : %s\n", lua_tostring(L,-1));
 		break;
 	case LUA_ERRMEM:
+		ejoy2d_handle_error(L, "LUA_ERRMEM", lua_tostring(L,-1));
 		fault("LUA_ERRMEM : %s\n", lua_tostring(L,-1));
 		break;
 	case LUA_ERRERR:
+		ejoy2d_handle_error(L, "LUA_ERRERR", lua_tostring(L,-1));
 		fault("LUA_ERRERR : %s\n", lua_tostring(L,-1));
 		break;
 	case LUA_ERRGCMM:
+		ejoy2d_handle_error(L, "LUA_ERRGCMM", lua_tostring(L,-1));
 		fault("LUA_ERRGCMM : %s\n", lua_tostring(L,-1));
 		break;
 	default:
+		ejoy2d_handle_error(L, "UnknownError", "Unknown");
 		fault("Unknown Lua error: %d\n", err);
 		break;
 	}
@@ -206,14 +255,41 @@ ejoy2d_game_drawframe(struct game *G) {
 	label_flush();
 }
 
-void
+int
 ejoy2d_game_touch(struct game *G, int id, float x, float y, int status) {
+    int disable_gesture = 0;
 	lua_getfield(G->L, LUA_REGISTRYINDEX, EJOY_TOUCH);
 	lua_pushnumber(G->L, x);
 	lua_pushnumber(G->L, y);
 	lua_pushinteger(G->L, status+1);
 	lua_pushinteger(G->L, id);
-	call(G->L, 4, 0);
+	int err = call(G->L, 4, 1);
+    if (err == LUA_OK) {
+        disable_gesture = lua_toboolean(G->L, -1);
+    }
+    return disable_gesture;
 }
 
+void
+ejoy2d_game_gesture(struct game *G, int type,
+                    double x1, double y1,double x2,double y2, int s) {
+    lua_getfield(G->L, LUA_REGISTRYINDEX, EJOY_GESTURE);
+    lua_pushnumber(G->L, type);
+    lua_pushnumber(G->L, x1);
+    lua_pushnumber(G->L, y1);
+    lua_pushnumber(G->L, x2);
+    lua_pushnumber(G->L, y2);
+    lua_pushinteger(G->L, s);
+    call(G->L, 6, 0);
+}
 
+void
+ejoy2d_game_message(struct game* G,int id_, const char* state, const char* data) {
+  lua_State *L = G->L;
+  lua_getfield(L, LUA_REGISTRYINDEX, EJOY_MESSAGE);
+  lua_pushnumber(L, id_);
+  lua_pushstring(L, state);
+  lua_pushstring(L, data);
+  call(L, 3, 0);
+  lua_settop(L, TOP_FUNCTION);
+}

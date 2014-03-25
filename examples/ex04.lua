@@ -12,6 +12,8 @@ local scissor = false
 local obj = ej.sprite("sample","mine")
 obj.resource.frame = 70
 obj.label.text = "Hello World"
+obj:ps(400,300)
+local screencoord = { scale = 1.2 }
 
 local game = {}
 
@@ -19,15 +21,13 @@ function game.update()
 	obj.frame = obj.frame + 1
 end
 
-local pos = { x = 500, y = 300 }
-
 function game.drawframe()
-	obj:draw(pos)
+	obj:draw(screencoord)
 end
 
 function game.touch(what, x, y)
 	if what == "END" then
-		local touched = obj:test(pos,x,y)
+		local touched = obj:test(x,y,screencoord)
 		if touched then
 			if touched.name == "label" then
 				touched.text = "label touched"
@@ -41,6 +41,10 @@ function game.touch(what, x, y)
 			obj.label.text = "Not Hit"
 		end
 	end
+end
+function game.message(...)
+end
+function game.handle_error(...)
 end
 
 ej.start(game)

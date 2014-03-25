@@ -1,6 +1,7 @@
 #include "shader.h"
 #include "opengl.h"
 #include "fault.h"
+#include "array.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +9,7 @@
 #include <assert.h>
 
 #define MAX_COMMBINE 64
-#define MAX_PROGRAM 3
+#define MAX_PROGRAM 6
 
 #define ATTRIB_VERTEX 0
 #define ATTRIB_TEXTCOORD 1
@@ -257,7 +258,7 @@ shader_draw(const float vb[16], uint32_t color) {
 void
 shader_drawpolygon(int n, const float *vb, uint32_t color) {
 	rs_commit();
-	struct vertex p[n];
+	ARRAY(struct vertex, p, n);
 	int i;
 	for (i=0;i<n;i++) {
 		p[i].vx = vb[i*4+0];
@@ -291,6 +292,7 @@ void
 shader_defaultblend() {
 	if (RS->blendchange) {
 		rs_commit();
+		RS->blendchange = 0;
 		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	}
 }
